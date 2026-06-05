@@ -1,0 +1,31 @@
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const darkThemes = ['ayu', 'navy', 'coal'];
+    const lightThemes = ['light', 'rust'];
+
+    let lastThemeWasLight = true;
+    const classList = document.documentElement.classList;
+    for (const cls of classList) {
+        if (darkThemes.includes(cls)) {
+            lastThemeWasLight = false;
+            break;
+        }
+    }
+
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: lastThemeWasLight ? 'default' : 'dark',
+    });
+
+    // Re-render on theme switch
+    for (const t of darkThemes) {
+        const el = document.getElementById(t);
+        if (el) el.addEventListener('click', () => { if (lastThemeWasLight) location.reload(); });
+    }
+    for (const t of lightThemes) {
+        const el = document.getElementById(t);
+        if (el) el.addEventListener('click', () => { if (!lastThemeWasLight) location.reload(); });
+    }
+});
+</script>

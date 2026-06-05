@@ -1,0 +1,14 @@
+[book]
+authors = ["Defi Research Team"]
+language = "zh"
+src = "src"
+title = "Uniswap 设计与实现"
+description = "从设计到源码，深入理解 Uniswap V2 / V3 / V4 的核心原理与工程实现"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "light"
+mathjax-support = true
+git-repository-url = "https://github.com/Defi-Research-Team/uniswap-design-and-implementation"

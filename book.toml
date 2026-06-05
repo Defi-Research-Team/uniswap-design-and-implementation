@@ -1,0 +1,14 @@
+[book]
+authors = ["Defi Research Team"]
+language = "en"
+src = "src"
+title = "Uniswap: Design and Implementation"
+description = "From design to source code — a deep dive into the core principles and engineering implementation of Uniswap V2 / V3 / V4"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "navy"
+mathjax-support = true
+git-repository-url = "https://github.com/Defi-Research-Team/uniswap-design-and-implementation"
