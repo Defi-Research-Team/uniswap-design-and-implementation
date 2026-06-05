@@ -18,10 +18,10 @@ Additional chapters covering Uniswap V2, V3, and V4 are being written and will b
 
 ## Read Online
 
-| Language       | Link          |
-| -------------- | ------------- |
-| English        | _Coming soon_ |
-| Chinese (中文) | _Coming soon_ |
+| Language       | Link |
+| -------------- | ---- |
+| English        | [Read](https://defi-research-team.github.io/uniswap-design-and-implementation/) |
+| Chinese (中文) | [阅读](https://defi-research-team.github.io/uniswap-design-and-implementation/zh/) |
 
 ## Build Locally
 
