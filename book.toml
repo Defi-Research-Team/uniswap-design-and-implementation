@@ -12,3 +12,4 @@ build-dir = "book"
 default-theme = "navy"
 mathjax-support = true
 git-repository-url = "https://github.com/Defi-Research-Team/uniswap-design-and-implementation"
+additional-css = ["theme/css/custom.css"]

@@ -1,380 +1,175 @@
-# Automated Market Makers
+# Constant Product Market Maker
 
-We begin with one of the most fundamental and important concepts in DeFi — the Automated Market Maker (AMM).
+Due to the characteristics of blockchain transactions, the order book model widely used by centralized exchanges (CEX) no longer applies in an on-chain environment, and decentralized exchanges (DEX) must explore a trading model suited to the blockchain. Uniswap adopts the constant product market maker (CPMM) model. This chapter discusses the theory behind CPMM, laying the foundation for the subsequent chapters' in-depth treatment of Uniswap's contract implementation.
 
-If you have used Uniswap, SushiSwap, or other DEXes for token swaps, you have already interacted with an AMM. But what are the mathematical principles behind AMMs? Why can they enable trading without traditional buyers and sellers placing orders? Why might liquidity providers face "impermanent loss"? This chapter will answer these questions one by one, laying the theoretical foundation for our subsequent deep dive into Uniswap's contract implementations.
+## Background and Motivation
 
-## Market Makers
+In financial markets, a **market maker** is an institution or individual that continuously provides **liquidity** for an asset. Liquidity refers to the ability of an asset to be bought and sold quickly at a reasonable price. In a market with good liquidity, traders can complete transactions at prices close to the current market price at any time, with minimal price impact even for large trades. In a market with poor liquidity, traders may need to wait a long time to find a counterparty, or be forced to accept prices far from the market price.
 
-Before understanding "automated" market makers, we need to understand what a "market maker" is.
+Centralized exchanges generally adopt the order book model, in which both market makers and ordinary traders submit orders through the order book. The order book records all outstanding buy and sell orders: a **bid** represents a buyer's offer to purchase a certain quantity of an asset at a specific price, and an **ask** represents a seller's offer to sell a certain quantity of an asset at a specific price; when a bid price is greater than or equal to an ask price, the exchange automatically matches them for execution. The exchange pushes the latest outstanding order information to the entire market in real time. Figure 1 shows an illustration of the order book for an ETH/USDC trading pair.
 
-### What is a Market Maker
+![ETH/USDC order book](images/ch01/orderbook.png)
 
-In financial markets, a **market maker** is an institution or individual that continuously provides buy and sell quotes for an asset. Market makers simultaneously place orders on both the buy and sell sides, committing to buy or sell a certain quantity of the asset at quoted prices, thereby providing **liquidity** to the market.
+*Figure 1　The order book of an ETH/USDC trading pair (illustrative). The upper section shows asks in red; the lower section shows bids in green; the left side shows prices (in USDC) and the right side shows order quantities (in ETH). The difference between the lowest ask and the highest bid is the spread. By continuously placing orders on both the buy and sell sides to capture this spread, a market maker provides liquidity to the market, and the spread is the market's reward for doing so.*
 
-"Liquidity" refers to the ability of an asset to be bought or sold quickly at a reasonable price. In a market with good liquidity, traders can complete transactions at prices close to the current market price at any time, with minimal price impact even for large trades. In a market with poor liquidity, traders may need to wait a long time to find a counterparty, or be forced to accept prices far from the market price.
+With market makers, traders do not need to wait for a counterparty to appear; they can trade with a market maker at any time. Because this is profitable, a market typically has multiple market makers competing with one another. Competition drives spreads narrower, and by continuously quoting, market makers absorb buying and selling pressure, reducing sharp price movements and contributing to market stability.
 
-A market maker's profit model is straightforward: buy at a lower price (bid), sell at a higher price (ask), and the difference between the two — the **spread** — is the market maker's source of profit.
+Because centralized exchanges or brokerages provide unified API services, the cost of submitting orders is almost negligible, so the order book model works well in centralized exchanges (such as Binance and Coinbase). In a decentralized blockchain environment, however, it is difficult to apply, mainly for two reasons. On one hand, transaction costs are high: every order placement, cancellation, and matching entails a change to the blockchain state and thus requires an on-chain transaction, so gas fees must be paid. This is especially true for market makers, who typically need to adjust quotes frequently; the cost of performing such operations on-chain is almost unacceptable. On the other hand, execution is slow: block confirmation times (about 12 seconds on Ethereum) are far slower than centralized exchanges (microsecond-level), preventing market makers from responding to market changes in a timely manner. To overcome these drawbacks, decentralized exchanges explored and developed the **automated market maker (AMM)** mechanism.
 
-For example, a market maker's quote for ETH might be:
+An automated market maker has no order book; in its place is a **pool** that holds two assets to be swapped (such as ETH and USDC). Without an order book, the trading price of an asset is no longer determined by outstanding bids or asks, but by the reserves of the two assets in the pool and a mathematical formula. A market maker no longer makes a market by placing buy and sell orders; instead, it deposits both assets into the pool simultaneously, providing liquidity for asset trades within the pool, and is therefore called a **liquidity provider (LP)**. Its market-making reward is no longer the bid-ask spread earned from buying low and selling high, but other rewards stipulated by the market-making mechanism (such as trading fees, liquidity mining returns, and so on).
 
-```
-Bid        Ask
-$2,000.00  $2,000.50
-```
+There are various automated market maker models. Different models define different price curves and liquidity distribution characteristics, suited to different trading scenarios. Uniswap adopts the constant product market maker model. Thanks to its concise mathematical form, good price discovery properties, and generality for any token pair, this model has become the most widely adopted AMM model. As the most successful DEX protocol, Uniswap is built on CPMM.
 
-This means the market maker is willing to buy ETH at $2,000.00 and sell ETH at $2,000.50. If someone sells to the market maker at $2,000.00, and another person buys from the market maker at $2,000.50, the market maker earns a spread of $0.50.
+## Definition
 
-### The Role of Market Makers
+Suppose a pool contains two tokens X and Y, with quantities $x$ and $y$ respectively. The constant product formula states:
 
-Market makers play a critical role in financial markets:
+$$x \cdot y = k \tag{1}$$
 
-- **Providing liquidity**: Traders don't need to wait for a counterparty to appear; they can trade with the market maker at any time
-- **Narrowing spreads**: Competition among multiple market makers drives bid-ask spreads tighter
-- **Smoothing price volatility**: Market makers absorb buying and selling pressure through continuous quoting, reducing sharp price movements
+where $k$ is a constant. We call the quantities $x$ and $y$ of tokens X and Y in the pool the **reserves**; the operation of a user depositing one token into the pool in exchange for another is called a **swap**; and the quantity $k = x \cdot y$ that remains constant throughout trading is called the **invariant**. On this basis, two quantities measuring the state of the pool can also be defined: $L = \sqrt{xy} = \sqrt{k}$ measures the total scale of funds in the pool and is called the liquidity; $P = y/x$ denotes the **price** of token X relative to token Y, that is, how many units of Y one unit of X exchanges for.
 
-Of course, market makers also face risks: if market prices move rapidly, the market maker's inventory may depreciate, resulting in losses. Therefore, professional market makers require sophisticated risk management strategies and the ability to quickly adjust their quotes.
+On the plane with $x$ and $y$ as coordinate axes, $x \cdot y = k$ is a hyperbola, as shown in Figure 2.
 
-## The Order Book Model
+![Constant product curve](images/ch01/cpmm_curve.png)
 
-Having understood the concept of market makers, let's examine the traditional trading model — the order book.
+*Figure 2　The constant product curve $x \cdot y = k$. The product of the coordinates at any point on the curve is always equal to the constant $k$. A swap moves the pool's state along the curve from point A to point B, depositing $\Delta x$ while withdrawing $\Delta y$, yet the product of the two always remains unchanged.*
 
-### How Order Books Work
+## Swap
 
-An **order book** is the most fundamental trading mechanism in traditional financial markets. It records all outstanding buy and sell orders, arranged by price:
+For the CPMM model, the core constraint during a swap is:
 
-```
-Bids (Buy)          Asks (Sell)
-─────────           ─────────
-Price  Qty          Price  Qty
-100    5            101    3
- 99   10            102    7
- 98    8            103   12
-```
+> A swap does not change liquidity; that is, before and after a swap, the product of the asset reserves $k$ is constant.
 
-- **Bid**: A buyer's offer to purchase a certain quantity of an asset at a specific price
-- **Ask**: A seller's offer to sell a certain quantity of an asset at a specific price
-- **Matching**: When a bid price ≥ an ask price, the exchange automatically matches them for execution
+Suppose a user wants to swap $\Delta x$ of token X for token Y. After the swap, the quantity of token X in the pool becomes $x + \Delta x$, while the quantity of token Y must decrease by $\Delta y$. According to the constant product constraint:
 
-In the order book model, market makers provide liquidity by simultaneously placing orders on both the buy and sell sides. Regular traders execute trades by submitting orders that match against the market maker's or other traders' resting orders.
+$$(x + \Delta x)(y - \Delta y) = k = x \cdot y \tag{2}$$
 
-### The On-Chain Dilemma of Order Books
+Some algebraic manipulation yields:
 
-The order book model works well in centralized exchanges (such as Binance, Coinbase), but faces fundamental challenges in a decentralized blockchain environment:
+$$\Delta y = \frac{\Delta x \cdot y}{x + \Delta x} \tag{3}$$
 
-- **High gas costs**: Every order placement, cancellation, and matching is an on-chain transaction requiring gas fees. Market makers typically need to adjust quotes frequently (potentially hundreds of times per second), making on-chain execution prohibitively expensive
-- **Liquidity fragmentation**: A single trading pair has many price levels, with liquidity scattered across different prices. On-chain liquidity is already limited, and further fragmentation leads to a worse trading experience
-- **Slow execution speed**: Block confirmation times (about 12 seconds on Ethereum) are far slower than centralized exchanges (microsecond-level), preventing market makers from responding to market changes in a timely manner
+Likewise, if a user wants to swap $\Delta y$ of token Y for token X, then
 
-These challenges may be acceptable for low-frequency, large-value trades, but for the DeFi vision of "any token pair, any time, instant trading," the order book model falls short.
+$$\Delta x = \frac{\Delta y \cdot x}{y + \Delta y} \tag{4}$$
 
-This raises a key question: **Can we design an on-chain trading mechanism that doesn't require buy/sell orders from both parties, nor professional market makers continuously quoting?**
+This is the core swap formula of CPMM: the amount of token that can be obtained is entirely determined by the input amount and the reserves in the pool. When swapping one token for another, the demand for the token being obtained increases, and its price rises accordingly. Taking the swap of token Y for token X as an example, the original price of X is $P = y/x$, and after the swap it becomes
 
-## Automated Market Makers
+$$P' = \frac{y + \Delta y}{x - \Delta x} > P \tag{5}$$
 
-The Automated Market Maker (AMM) offers a fundamentally different answer: **no order book, no traditional market maker — instead, mathematical formulas and liquidity pools determine prices**.
+indicating that the price of X rises (and by the same reasoning, the price of Y falls). This property is consistent with the law of supply and demand: greater demand for an asset raises its price, and vice versa.
 
-### Core Ideas of AMMs
+Since the swap amount depends only on the input amount and the reserves in the pool, and the reserves are related to price and liquidity by:
 
-The core ideas of AMMs can be summarized as follows:
+$$\sqrt{xy} = L \tag{6}$$
 
-1. **Liquidity pools**: Create a pool for each trading pair, holding two tokens (e.g., ETH and USDC)
-2. **Mathematical formula**: Use a mathematical formula to define the relationship between the quantities of the two tokens in the pool, which determines the exchange price
-3. **Trade anytime**: When someone wants to swap token A for token B, they swap directly from the pool at the formula-calculated price, without waiting for a counterparty
-4. **Anyone can be a market maker**: Anyone can deposit two tokens into a pool to become a liquidity provider (LP) and earn trading fees
+$$P = y/x \tag{7}$$
 
-The key difference from the order book model is: **AMMs have no orders; prices are entirely determined by mathematical formulas and the ratio of assets in the pool**. This means trades don't need to wait for a counterparty — as long as the pool has sufficient liquidity, swaps can be completed at any time.
+the swap amount $\Delta x$ or $\Delta y$ can also be expressed as a function of liquidity and price:
 
-From a market maker's perspective, AMMs "automate" the role of market making. Traditional market makers need professional teams and complex strategies to continuously quote, whereas in AMMs, mathematical formulas replace quoting strategies, LP deposits replace market maker inventory, and the price discovery process is fully automated.
-
-### Multiple AMM Models
-
-AMM is not a single fixed model, but rather a general term for a class of market-making mechanisms driven by mathematical formulas. Different formulas define different price curves and liquidity distribution characteristics. Common AMM models include:
-
-- **Constant Product Market Maker (CPMM)**: $x \cdot y = k$, with a hyperbolic price curve. This is the most classic AMM model, adopted by major DEXes such as Uniswap V2, SushiSwap, and PancakeSwap
-- **Constant Sum Market Maker (CSMM)**: $x + y = k$, with a constant price that produces no slippage but will deplete one token's reserves in the pool
-- **Constant Mean Market Maker (CMMM)**: A model proposed by Balancer that supports pools with more than two tokens and allows custom weights for each token
-- **Hybrid AMM**: Combines the advantages of multiple models. For example, Curve's StableSwap combines constant sum and constant product for stablecoin pairs, providing extremely low slippage when prices are close to 1:1
-
-Each model has its own strengths and is suited for different trading scenarios. Among them, the **Constant Product Market Maker (CPMM)** has become the most widely adopted AMM model due to its simple mathematical form, good price discovery properties, and generality for any token pair. Uniswap, as the most successful DEX protocol, is built on the CPMM foundation.
-
-## Constant Product Market Maker (CPMM)
-
-### Definition
-
-Suppose a liquidity pool contains two tokens X and Y, with quantities $x$ and $y$ respectively. The constant product formula states:
-
-$$x \cdot y = k$$
-
-where $k$ is a constant that remains unchanged before and after trades.
-
-We define the following terms:
-
-- **Reserves**: The quantities $x$ and $y$ of tokens X and Y in the pool
-- **Invariant**: $k = x \cdot y$, which remains constant during trades
-- **Liquidity**: $L = \sqrt{xy} = \sqrt{k}$, measuring the total scale of funds in the pool
-- **Price**: $P = y / x$, i.e., the price of token Y relative to token X
-
-The core meaning of the constant product formula is: **swaps do not change liquidity** — no matter how much token X a trader swaps for token Y, the product of the two token quantities $xy$ always equals $k$, and liquidity $L$ remains unchanged. When one token increases in the pool, the other necessarily decreases proportionally, but this is merely a conversion of asset form; the total liquidity of the pool remains the same.
-
-### Deriving the Token Swap Formula
-
-Let's derive the token swap formula based on the constant product constraint.
-
-Suppose a user wants to swap $\Delta x$ of token X for token Y. After the swap, the pool's token X quantity becomes $x + \Delta x$, and the token Y quantity must decrease by $\Delta y$. According to the constant product constraint (i.e., liquidity remains unchanged):
-
-$$(x + \Delta x)(y - \Delta y) = k = x \cdot y$$
-
-Expanding the left side:
-
-$$xy - x \cdot \Delta y + \Delta x \cdot y - \Delta x \cdot \Delta y = x \cdot y$$
-
-Cancel $xy$ from both sides:
-
-$$-x \cdot \Delta y + \Delta x \cdot y - \Delta x \cdot \Delta y = 0$$
-
-Rearranging:
-
-$$x \cdot \Delta y = \Delta x \cdot (y - \Delta y)$$
-
-$$\Delta y = \frac{\Delta x \cdot y}{x + \Delta x}$$
-
-This is the core swap formula of CPMM: **the amount of token Y $\Delta y$ that can be obtained with $\Delta x$ of token X is entirely determined by the current reserves of the two tokens in the pool**. Note that this derivation does not account for fees.
-
-### Intuitive Understanding
-
-While mathematical formulas are precise, intuitive understanding is equally important. We can understand $x \cdot y = k$ from two perspectives:
-
-**Perspective 1: Constant Product**
-
-The product of the two token quantities in the pool remains unchanged before and after trades. If the pool has 100 ETH and 200,000 USDC, then $k = 100 \times 200000 = 20,000,000$. Regardless of how many trades occur, as long as no liquidity is added or removed, the product of ETH and USDC quantities always equals 20,000,000.
-
-**Perspective 2: Hyperbolic Constraint**
-
-On a plane with $x$ and $y$ as coordinate axes, $x \cdot y = k$ is a hyperbola. The quantities of the two tokens in the pool always move along this curve. When one token increases, the other necessarily decreases — this is the essence of "swapping."
-
-```
-  y
-  │╲
-  │  ╲
-  │    ╲
-  │      ╲
-  │        ╲
-  │          ╲
-  │            ╲
-  │              ╲
-  └────────────────╲ x
-     x·y = k (hyperbola)
-```
-
-### Simple Example
-
-Suppose an ETH/USDC pool has 10 ETH and 20,000 USDC, $k = 200,000$.
-
-**Scenario**: Alice wants to swap 1 ETH for USDC.
-
-According to the formula:
-
-$$\Delta y = \frac{\Delta x \cdot y}{x + \Delta x} = \frac{1 \times 20000}{10 + 1} = \frac{20000}{11} \approx 1818.18 \text{ USDC}$$
-
-Pool state after the trade:
-- ETH: $10 + 1 = 11$
-- USDC: $20000 - 1818.18 = 18181.82$
-- Verification: $11 \times 18181.82 = 200000$ ✓
-
-Note that at the pre-trade "price" ($20000/10 = 2000$ USDC/ETH), 1 ETH should be worth 2000 USDC. But in reality, only 1818.18 USDC was received — nearly 182 USDC less. This difference is caused by **slippage** and **price impact**, which we'll analyze in detail later.
-
-## Price Discovery Mechanism
-
-### Reserve Ratio as Price
-
-In CPMM, the "price" of a token is implicitly determined by the reserve ratio of the two tokens in the pool.
-
-Consider a limiting case: when the swap amount $\Delta x$ is extremely small, the formula approximates:
-
-$$\frac{\Delta y}{\Delta x} \approx \frac{y}{x}$$
-
-That is, **the marginal price equals the reserve ratio**. In the previous example:
-
-- Before trade: price = $y/x = 20000/10 = 2000$ USDC/ETH
-- After trade: price = $y'/x' = 18181.82/11 \approx 1652.89$ USDC/ETH
-
-We can see that the trade caused ETH to depreciate relative to USDC (from 2000 to 1652.89), which is consistent with supply and demand: there's more ETH in the pool, so its "price" naturally decreases.
-
-This is the AMM's **automatic price discovery**: no external price input is needed — the asset ratio in the pool is itself the price. When external market prices change, arbitrageurs will trade to pull the pool's price back in line with the market — this process is automatic and trustless.
-
-### Slippage and Price Impact
-
-**Slippage** refers to the difference between a trade's expected price and its actual execution price.
-
-Returning to the earlier example: Alice swapped 1 ETH for USDC. The pre-trade price was 2000 USDC/ETH, but she actually received only 1818.18 USDC. The effective exchange rate was:
-
-$$\text{Effective price} = \frac{1818.18}{1} = 1818.18 \text{ USDC/ETH}$$
-
-$$\text{Slippage} = \frac{2000 - 1818.18}{2000} = 9.09\%$$
-
-**Price impact** refers to the magnitude of the pool's price change caused by a single trade.
-
-$$\text{Price impact} = \frac{|P_{\text{new}} - P_{\text{old}}|}{P_{\text{old}}} = \frac{|1652.89 - 2000|}{2000} = 17.36\%$$
-
-Slippage and price impact are related but distinct concepts:
-- **Price impact** measures "how much the price changed" — focusing on the pool's state change
-- **Slippage** measures "how much less I actually received compared to expectations" — focusing on the trader's cost
-
-Both reflect the pool's **liquidity depth**. The more funds in the pool (the larger $k$), the less slippage and price impact for the same trade size.
-
-### Brief Note on Fees
-
-So far we have ignored fees. In practice, AMMs charge a percentage fee on each trade (e.g., Uniswap V2 charges 0.3%), which is distributed to all LPs. When fees are included, the swap formula becomes more complex and will be derived in detail in the V2 chapters.
+$$\Delta x = \frac{\Delta L}{\sqrt{P}}, \quad \Delta y = \Delta L\sqrt{P} \tag{8}$$
 
 ## Liquidity Management
 
-Earlier we defined liquidity as $L = \sqrt{xy}$ and stated that trades do not change liquidity. How is liquidity created and managed? What constraints must liquidity providers follow when adding assets to a pool?
+To ensure there are sufficient tokens in the pool for swapping, liquidity providers must add assets to the pool; this process is called **adding liquidity**. Conversely, when a liquidity provider wants to reduce the assets in the pool, it must remove assets from the pool; this process is called **removing liquidity**. Whether adding or removing liquidity, both involve a change in the quantities of the two assets, and this change is not arbitrary. Its core constraint is:
 
-### Constraints for Adding Liquidity
+> Adding or removing liquidity does not change the current price of the assets.
 
-Adding liquidity to a pool with existing reserves essentially means simultaneously increasing both token quantities. Suppose the pool currently has $x$ of token X and $y$ of token Y, with price $P = y/x$ and liquidity $L = \sqrt{xy}$. An LP wants to add $\Delta x$ of token X and $\Delta y$ of token Y.
+### Adding Liquidity
 
-There is a core constraint for adding liquidity: **adding liquidity must not change the asset price**. Liquidity providers are simply injecting more funds into the pool and should not alter the relative price of the tokens. Since price is defined by the reserve ratio, the price must be equal before and after adding liquidity:
+Suppose the pool currently holds $x$ of token X and $y$ of token Y, with price $P = y/x$ and liquidity $L = \sqrt{xy}$. An LP wants to add $\Delta x$ of token X and $\Delta y$ of token Y. According to the core constraint, the price must be equal before and after adding liquidity:
 
-$$\frac{y}{x} = \frac{y + \Delta y}{x + \Delta x} = P$$
+$$\frac{y}{x} = \frac{y + \Delta y}{x + \Delta x} = P \tag{9}$$
 
-This means the quantities of the two new tokens must be proportional to the current price:
+Slightly rearranging Equation (9) gives the following relation:
 
-$$\frac{\Delta y}{\Delta x} = \frac{y}{x} = P$$
+$$\frac{\Delta y}{\Delta x} = \frac{y}{x} = P \tag{10}$$
 
 That is, $\Delta y = \Delta x \cdot P$. The LP cannot freely choose the quantities of the two tokens to provide; they must strictly follow the current price ratio.
 
-### Calculating the Liquidity Increment
+Equation (10) shows that, when the assets already have reserves, the two assets provided when adding liquidity must be proportional, and the ratio is exactly the current price. Given this constraint, the quantities $\Delta x$ and $\Delta y$ are determined; since both quantities are determined, their product is a constant. Let:
 
-Since $\Delta x$ and $\Delta y$ satisfy the price constraint, their product is also a constant. We denote the liquidity increment as $\Delta L$. It can be shown that:
+$$\Delta x \Delta y = (\Delta L)^2 \tag{11}$$
 
-$$\Delta L = \Delta x \cdot \sqrt{P} = \Delta x \cdot \sqrt{\frac{y}{x}} = L \cdot \frac{\Delta x}{x}$$
+Combining Equations (10) and (11), we can write:
 
-Similarly:
+$$\Delta L = \Delta x\sqrt{P} = \Delta x\sqrt{\frac{y}{x}} = \Delta x\sqrt{\frac{xy}{x^2}} = L\frac{\Delta x}{x} \tag{12}$$
 
-$$\Delta L = \frac{\Delta y}{\sqrt{P}} = L \cdot \frac{\Delta y}{y}$$
+By the same reasoning:
 
-These two equations show: **the liquidity increment is proportional to the amount of tokens the LP provides, with the proportionality factor being the ratio of current liquidity to the corresponding token's reserves**. For example, if the LP provides token X equal to 1% of current reserves, the liquidity increment is also 1% of current liquidity.
+$$\Delta L = \frac{\Delta y}{\sqrt{P}} = \frac{\Delta y}{\sqrt{\frac{y}{x}}} = \frac{\Delta y}{\sqrt{\frac{y^2}{xy}}} = L\frac{\Delta y}{y} \tag{13}$$
 
-After adding liquidity, the new liquidity is $L' = L + \Delta L$, satisfying:
+Combining Equations (12) and (13), after the LP adds assets, the new liquidity $L'$ satisfies:
 
-$$L'^2 = (x + \Delta x)(y + \Delta y) = (L + \Delta L)^2$$
+$$L'^2 = (x + \Delta x)(y + \Delta y) = (L + \Delta L)^2 \tag{14}$$
+
+Equation (14) shows that $\Delta L$ can be regarded as a liquidity increment; that is, on top of the original liquidity, the LP injects $\Delta L$ of liquidity into the pool.
 
 ### Removing Liquidity
 
-Removing liquidity is the reverse operation of adding liquidity. LPs withdraw both tokens in proportion to their liquidity share:
+When adding liquidity, both $\Delta x$ and $\Delta y$ are greater than 0; removing liquidity is the inverse operation of adding liquidity, and in this case $\Delta x$, $\Delta y$ (and $\Delta L$) are all less than 0. According to the core constraint, removing liquidity likewise does not change the price, so Equation (9) still holds. Inverting Equations (12) and (13) for adding liquidity gives the reserves the LP receives when removing liquidity:
 
-$$\Delta x = \frac{\Delta L}{L} \cdot x$$
+$$\Delta x = \frac{\Delta L}{L} \cdot x \tag{15}$$
 
-$$\Delta y = \frac{\Delta L}{L} \cdot y$$
+$$\Delta y = \frac{\Delta L}{L} \cdot y \tag{16}$$
 
 where $x$ and $y$ are the token reserves in the pool at the time of removal.
 
-Notably, the $\Delta x$ and $\Delta y$ that an LP receives often differ from the amounts originally provided when adding liquidity — because the pool's token ratio may have changed due to trades in the interim. This is the fundamental cause of **impermanent loss**, which we analyze in detail in the next section.
+Alternatively, expressed as a relation between $P$ and $L$:
+
+$$\Delta x = \frac{\Delta L}{\sqrt{P}} \tag{17}$$
+
+$$\Delta y = \Delta L\sqrt{P} \tag{18}$$
+
+Equations (15) and (16) show that the LP receives both tokens in proportion to the liquidity share it holds.
+
+Note that during the period between depositing and withdrawing liquidity, the quantities of tokens in the pool may have changed due to swaps, so the $\Delta x$ and $\Delta y$ received often differ from the quantities originally provided when adding liquidity.
 
 ## Impermanent Loss
 
-### What is Impermanent Loss
+When a liquidity provider deposits tokens into a pool, if the price of the tokens in the pool changes, the total value of the tokens the LP deposited will be lower than the value of "simply holding" (that is, doing nothing and keeping the tokens in a wallet). This difference is called **impermanent loss (IL)**.
 
-When a liquidity provider deposits funds into an AMM pool, if the relative price of the tokens in the pool changes, the LP's asset value will be lower than the value of "simply holding" (i.e., doing nothing and keeping the tokens in a wallet). This difference is **impermanent loss** (IL).
+Suppose the pool holds $x$ ETH and $y$ USDC, with price $P_0 = y/x$. The LP deposits $\Delta x$ ETH and $\Delta y$ USDC into the pool.
 
-It's called "impermanent" because if the price returns to the level at deposit time, the loss disappears. However, in practice, prices often don't return to the starting point, so the name "impermanent loss" can be misleading — a more accurate description would be **"a temporary paper loss that may well become permanent."**
+By Equation (10), the two assets deposited must be proportional to the current price: $\Delta y = \Delta x \cdot P_0$. At the same time, by Equation (12), this deposit contributes liquidity $\Delta L = \Delta x\sqrt{P_0}$ to the LP.
 
-### Mathematical Derivation
+As the market changes, the price of the assets in the pool becomes $P$. If the LP removes liquidity at this point, then by Equations (6) and (7), the share of liquidity $\Delta L$ held by the LP corresponds to $\Delta L/\sqrt{P}$ ETH and $\Delta L\sqrt{P}$ USDC at price $P$, and its value denominated in USDC is:
 
-Suppose an LP deposits equal-value ETH and USDC into an ETH/USDC pool. The price at deposit is $P_0$, and the price later becomes $P$. Define the price change ratio:
+$$V = \frac{\Delta L}{\sqrt{P}} \cdot P + \Delta L\sqrt{P} = \Delta L\sqrt{P} + \Delta L\sqrt{P} = 2\Delta L\sqrt{P} \tag{19}$$
 
-$$r = \frac{P}{P_0}$$
+Substituting Equation (12):
 
-When $r = 1$, the price is unchanged; $r > 1$ means ETH has appreciated; $r < 1$ means ETH has depreciated.
+$$V = 2\Delta x\sqrt{P_0}\sqrt{P} = 2\Delta x\sqrt{P_0 P} \tag{20}$$
 
-**Step 1: Calculate the LP's asset value in the pool**
+If the LP does not deposit into the pool but instead keeps the $\Delta x$ ETH and $\Delta y$ USDC in a wallet, then when the price becomes $P$, the value of these assets (also denominated in USDC) is:
 
-Suppose at the initial deposit, the pool has $x$ ETH and $y$ USDC, with $P_0 = y/x$. From the constant product constraint $x \cdot y = k$, and given that $x \cdot P_0 = y$ (equal-value deposit), we get $x = \sqrt{k/P_0}$ and $y = \sqrt{k \cdot P_0}$.
+$$V' = \Delta x \cdot P + \Delta y = \Delta x(P + P_0) \tag{21}$$
 
-When the price changes to $P$, the pool's assets rebalance to:
+Define the price change ratio $r = P / P_0$: $r = 1$ means the price is unchanged, $r > 1$ means ETH has appreciated, and $r < 1$ means ETH has depreciated. Taking the ratio of Equations (20) and (21) and substituting $P = r P_0$:
 
-$$x' = \sqrt{\frac{k}{P}}, \quad y' = \sqrt{k \cdot P}$$
-
-The LP's total asset value in the pool (denominated in USDC):
-
-$$V_{\text{pool}} = x' \cdot P + y' = \sqrt{\frac{k}{P}} \cdot P + \sqrt{k \cdot P} = \sqrt{kP} + \sqrt{kP} = 2\sqrt{kP}$$
-
-**Step 2: Calculate the value of simply holding**
-
-The LP's initial ETH and USDC holdings, also denominated in USDC:
-
-$$V_{\text{hold}} = x \cdot P + y = \sqrt{\frac{k}{P_0}} \cdot P + \sqrt{kP_0} = \sqrt{k} \left(\frac{P}{\sqrt{P_0}} + \sqrt{P_0}\right) = \sqrt{kP_0}\left(r + 1\right)$$
-
-**Step 3: Calculate impermanent loss**
-
-Comparing the two:
-
-$$\frac{V_{\text{pool}}}{V_{\text{hold}}} = \frac{2\sqrt{kP}}{\sqrt{kP_0}(r + 1)} = \frac{2\sqrt{r}}{r + 1}$$
+$$\frac{V}{V'} = \frac{2\Delta x\sqrt{P_0 \cdot r P_0}}{\Delta x(r P_0 + P_0)} = \frac{2\sqrt{r}}{r + 1} \tag{22}$$
 
 Therefore, the impermanent loss ratio is:
 
-$$\text{IL} = 1 - \frac{2\sqrt{r}}{r + 1}$$
+$$\text{IL} = 1 - \frac{V}{V'} = 1 - \frac{2\sqrt{r}}{r + 1} \tag{23}$$
 
-### Key Conclusions
+Equation (23) shows that impermanent loss is independent of the scale of the LP's deposit and depends only on the price change ratio $r$.
 
-Let's plug in some specific price change ratios $r$ to get a feel for the magnitude of impermanent loss:
+Figure 3 shows how impermanent loss varies with the price change ratio $r$:
 
-| Price Change | $r$ | $V_{\text{pool}} / V_{\text{hold}}$ | Impermanent Loss |
-|---------|-----|-------------------------------------|---------|
-| No change | 1.00 | 100.00% | 0.00% |
-| ±25% | 1.25 | 99.01% | 0.99% |
-| ±50% | 1.50 | 97.98% | 2.02% |
-| ±100% | 2.00 | 94.28% | 5.72% |
-| ±200% | 3.00 | 86.60% | 13.40% |
-| ±400% | 5.00 | 74.53% | 25.47% |
+![Impermanent loss curve](images/ch01/impermanent_loss.png)
 
-> **About Price Changes**
-> The "±" in the table indicates: ETH appreciating by 25% ($r=1.25$) and ETH depreciating by 20% ($r=0.8$) result in the same impermanent loss. This is because the formula is symmetric in $r$ and $1/r$ — $\frac{2\sqrt{r}}{r+1}$ has the same value at $r$ and $1/r$. In other words, **price deviation in any direction causes impermanent loss, and the larger the deviation, the greater the loss**.
+*Figure 3　Impermanent loss as a function of the price change ratio $r = P/P_0$. The curve reaches its minimum of $0\%$ at $r=1$ (no price change) and rises symmetrically about $r=1$: a 2x change ($r=2$ or $r=0.5$) yields about $5.7\%$, and a 5x change ($r=5$) about $25.5\%$.*
 
-### Intuitive Explanation
-
-Why does price change cause impermanent loss?
-
-**The fundamental reason is that AMMs "sell" appreciating assets and "buy" depreciating assets when prices change**, which is the opposite of an investor's ideal behavior (hold appreciating assets, sell depreciating assets).
-
-Specifically:
-- When ETH's price rises, arbitrageurs continuously use USDC to buy ETH from the pool. The pool's ETH decreases and USDC increases. LPs are "forced to sell" the appreciating ETH
-- When ETH's price falls, arbitrageurs continuously use ETH to swap for USDC from the pool. The pool's ETH increases and USDC decreases. LPs are "forced to buy" the depreciating ETH
-
-This "passive rebalancing" is an inherent property of CPMM and the root cause of impermanent loss.
-
-### Balancing Impermanent Loss and Fees
-
-Impermanent loss may sound alarming, but in reality, LPs also earn **trading fee revenue**. In Uniswap V2, for example, each trade incurs a 0.3% fee, all of which goes to LPs.
-
-LP's net return = fee revenue - impermanent loss
-
-- When fee revenue > impermanent loss, the LP earns a positive return
-- When fee revenue < impermanent loss, the LP has a net loss
-
-Therefore, **whether an LP is profitable depends on the pool's trading activity and price volatility**: more active trading generates more fee revenue; greater price volatility leads to larger impermanent losses.
+Impermanent loss can be understood as the AMM mechanism forcing LPs to "sell" appreciating assets and "buy" depreciating assets when prices change, which is exactly the opposite of an investor's ideal behavior (holding appreciating assets and selling depreciating assets). Taking the above as an example: when the price of ETH rises, arbitrageurs continuously use USDC to buy ETH from the pool. The pool's ETH decreases and its USDC increases. The LP is "forced to sell" the appreciating ETH. When the price of ETH falls, arbitrageurs continuously use ETH to swap for USDC from the pool. The pool's ETH increases and its USDC decreases. The LP is "forced to buy" the depreciating ETH. This "passive rebalancing" is an inherent property of CPMM and the root cause of impermanent loss.
 
 ## Summary
 
-- **Market makers**: Provide liquidity to the market by continuously offering buy and sell quotes, earning the bid-ask spread
-- **Order book model and on-chain dilemma**: The order book model works well in centralized exchanges but faces fundamental challenges on-chain such as high gas costs and liquidity fragmentation
-- **AMM**: Uses mathematical formulas and liquidity pools to replace order books and traditional market makers. Multiple AMM models exist (CPMM, CSMM, CMMM, hybrid AMMs), among which the constant product market maker is widely adopted for its simplicity and generality
-- **Constant product (CPMM)**: $x \cdot y = k$ is the most classic AMM formula. The swap amount is determined by $\Delta y = \frac{\Delta x \cdot y}{x + \Delta x}$. The price is implicitly determined by the reserve ratio $y/x$
-- **Slippage and price impact**: The larger the trade, the more the effective exchange rate deviates from the marginal price. The more funds in the pool (the larger $k$), the less slippage for the same trade size
-- **Liquidity management**: Liquidity $L = \sqrt{xy}$. Adding liquidity does not change the price; new tokens must follow the proportional constraint $\Delta y / \Delta x = y/x = P$. The liquidity increment $\Delta L = L \cdot \Delta x / x$
-- **Impermanent loss**: The loss LPs face due to the AMM's passive rebalancing mechanism. The formula is $\text{IL} = 1 - \frac{2\sqrt{r}}{r+1}$. The larger the price deviation, the greater the loss. An LP's actual return depends on the balance between fee revenue and impermanent loss
+The characteristics of blockchain transactions make the order book model, widely used in centralized exchanges, unsuitable, and DEXes have explored and adopted a new mechanism, namely the automated market maker. Uniswap adopts the constant product market maker: during a swap, the product of the reserves of the two assets in the pool remains constant; when adding or removing liquidity, the price of the pool must remain unchanged. Based on these two core constraints, a series of formulas for CPMM token swaps and liquidity management can be derived, and these two constraints form the cornerstone of Uniswap.
+
+An inherent property of CPMM is impermanent loss, which forces LPs to "sell" appreciating assets and "buy" depreciating assets when prices change. If the price does not return to the level at which the LP deposited liquidity, the total value of the LP's assets will be lower than the value of simply holding the assets, so supplementary mechanisms must be designed to incentivize LPs to provide liquidity. These mechanisms include trading fee distribution, liquidity mining, and others, which will be covered in detail in subsequent chapters.
 
 ## References
 
-- [Ethereum.org: Automated Market Makers (AMMs)](https://ethereum.org/en/developers/docs/defi/automated-market-makers/)
-- [Uniswap V2 Whitepaper](https://uniswap.org/whitepaper.pdf) — Hayden Adams, Noah Zinsmeister, Dan Robinson, 2020
-- [Uniswap V3 Whitepaper](https://uniswap.org/whitepaper-v3.pdf) — Hayden Adams, Noah Zinsmeister, Dan Robinson, 2021
-- [Balancer Whitepaper](https://balancer.fi/whitepaper.pdf) — Fernando Martinelli, Nikolai Mushegian, 2019
-- [Curve Whitepaper](https://curve.fi/curve%20DAO.pdf) — Michael Egorov, 2019
-- [Improving Front Running Resistance of X*y=k Market Makers](https://arxiv.org/abs/2007.12272) — Guillermo Angeris, Tarun Chitra, Alex Evans, Stephen Boyd, 2020
-- [An analysis of Uniswap markets](https://arxiv.org/abs/1911.03380) — Guillermo Angeris, Hsien-Tang Kao, Rei Chiang, Charlie Noyes, Tarun Chitra, 2019
-
-> **Reading Note**
-> This chapter establishes a purely theoretical mathematical framework. Starting from the next chapter, we will first learn about the fundamental tool for on-chain computation — fixed-point arithmetic — and then dive into Uniswap's contract source code to see how these theories are translated into Solidity implementations.
+- [Uniswap V2 Whitepaper](https://uniswap.org/whitepaper.pdf), Hayden Adams, Noah Zinsmeister, Dan Robinson, 2020
+- [Uniswap V3 Whitepaper](https://uniswap.org/whitepaper-v3.pdf), Hayden Adams, Noah Zinsmeister, Dan Robinson, 2021
+- [An analysis of Uniswap markets](https://arxiv.org/abs/1911.03380), Guillermo Angeris, Hsien-Tang Kao, Rei Chiang, Charlie Noyes, Tarun Chitra, 2019

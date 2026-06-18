@@ -1,0 +1,19 @@
+/* Publication-style figure layout: center standalone images and their
+   captions, and never let an image overflow the reading column.
+   mdBook renders each ![alt](src) as <p><img .../></p>; a caption written
+   in Markdown as _图 N …_ / _Figure N …_ becomes the <p> immediately
+   following that image paragraph. */
+main img {
+  display: block;
+  margin: 1.6em auto;
+  max-width: 100%;
+  height: auto;
+}
+
+main p:has(> img:only-child) + p {
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
+  line-height: 1.5;
+  margin: -1em auto 1.6em;
+}
