@@ -13,6 +13,7 @@ This book is in active development. The following chapters are currently availab
 - Preface
 - Chapter 1: AMM Fundamentals
 - Chapter 2: Fixed-Point Arithmetic
+- Chapter 3: V2 Architecture
 
 Additional chapters covering Uniswap V2, V3, and V4 are being written and will be published incrementally.
 

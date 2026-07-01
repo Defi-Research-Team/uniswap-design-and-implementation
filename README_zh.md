@@ -13,6 +13,7 @@
 - 前言
 - Chapter 1: AMM 基础理论
 - Chapter 2: 定点数运算
+- Chapter 3: V2 整体架构
 
 后续将陆续发布 Uniswap V2、V3、V4 相关章节。
 

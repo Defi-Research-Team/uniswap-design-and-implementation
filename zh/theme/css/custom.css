@@ -17,3 +17,24 @@ main p:has(> img:only-child) + p {
   line-height: 1.5;
   margin: -1em auto 1.6em;
 }
+
+/* Chinese titles for mdBook's native GFM admonitions.
+   mdBook emits <blockquote class="blockquote-tag blockquote-tag-TYPE"> whose
+   <p class="blockquote-tag-title"> holds an <svg> icon plus a bare English word
+   (Note/Tip/Important/Warning/Caution). The label is fixed per type — there is
+   no per-instance custom title — so we hide the English text with font-size:0
+   (the SVG keeps its explicit 18px box and stays visible) and inject the Chinese
+   label via ::after. Scoped to the Chinese book; the English book keeps the
+   native English titles. */
+.blockquote-tag-title {
+  font-size: 0;
+}
+.blockquote-tag-title::after {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.blockquote-tag-note > .blockquote-tag-title::after { content: "说明"; }
+.blockquote-tag-tip > .blockquote-tag-title::after { content: "提示"; }
+.blockquote-tag-important > .blockquote-tag-title::after { content: "重要"; }
+.blockquote-tag-warning > .blockquote-tag-title::after { content: "注意"; }
+.blockquote-tag-caution > .blockquote-tag-title::after { content: "警告"; }
